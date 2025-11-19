@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Vamos a reciclar!</title>
+  <style>
+    :root{--bg:#f3f7f9;--card:#ffffff;--accent:#2b8aef;--success:#36b37e}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;background:url("data:image/png;base64,{{BACKGROUND_IMG}}") no-repeat center center fixed;background-size:cover;animation:bgMove 18s ease-in-out infinite;color:#fa9e14;display:flex;flex-direction:column;min-height:100vh}
+    header{padding:18px 24px;background:transparent}
+    .container{max-width:1100px;margin:18px auto;padding:18px}
+    h1{margin:0 0 8px;font-size:1.6rem}
+    p.lead{margin:0;color:#234;opacity:.8}
+
+    .game{display:grid;grid-template-columns:1fr 420px;gap:20px;margin-top:20px}
+
+    .left{background:var(--card);padding:16px;border-radius:12px;box-shadow:0 6px 20px rgba(10,20,40,.06)}
+    .right{display:flex;flex-direction:column;gap:12px}
+
+    .items{display:flex;flex-wrap:wrap;gap:10px;padding:8px}
+    .item{width:100px;height:100px;border-radius:12px;background:linear-gradient(180deg,#fff 0%,#f7fbff 100%);display:flex;align-items:center;justify-content:center;border:2px dashed transparent;cursor:grab;user-select:none;padding:6px;box-shadow:0 8px 18px rgba(0,0,0,0.3);}
+    .item.dragging{opacity:.5;transform:scale(.98)}
+    .item .icon{font-size:44px;filter:drop-shadow(0 6px 14px rgba(11,35,54,.08))}
+    .meta{margin-top:10px;display:flex;justify-content:space-between;align-items:center}
+    .controls button{padding:8px 12px;border-radius:10px;border:0;background:var(--accent);color:white;font-weight:600;cursor:pointer}
+
+    .bins{display:flex;gap:12px;justify-content:space-between}
+    .bin {
+  width: 120px;
+  height: 160px;
+  margin: 10px;
+  padding: 10px;
+  text-align: center;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 10px 22px rgba(0,0,0,0.45);
+}
+    .bin.highlight{box-shadow:0 10px 30px rgba(43,138,239,.12);transform:translateY(-6px)}
+    .bin h3{margin:6px 0 0;font-size:1rem}
+    .bin .label{font-size:.85rem;opacity:.8}
+
+    .score{display:flex;gap:10px;align-items:center}
+    .badge{background:#eef6ff;padding:6px 10px;border-radius:999px;font-weight:700}
+
+    .footer{margin-top:18px;padding:12px;border-radius:12px;background:linear-gradient(180deg,#fff 0%,#f5fbff 100%);display:flex;justify-content:space-between;align-items:center}
+
+    @media (max-width:900px){
+      .game{grid-template-columns:1fr;}
+      .right{order:-1}
+    }
+  @keyframes bgMove {
+  0% {background-position:center;}
+  50% {background-position: center 20px;}
+  100% {background-position:center;}
+}
+</style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>Recicla los residuos</h1>
+      <p class="lead">Arrastra los objetos hasta el tacho correcto: <strong>Tetrapack</strong>, <strong>Plástico</strong> u <strong>Orgánico</strong>. ¡Haz el mayor puntaje posible!</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="game">
+      <section class="left">
+        <h2>Objetos</h2>
+        <div id="items" class="items" aria-live="polite"></div>
+
+        <div class="meta">
+          <div class="controls">
+            <button id="shuffleBtn">Barajar</button>
+            <button id="resetBtn">Reiniciar</button>
+          </div>
+          <div class="score">
+            <div class="badge">✅ Aciertos: <span id="correct">0</span></div>
+            <div class="badge">❌ Errores: <span id="wrong">0</span></div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="right">
+        <h2>Contenedores</h2>
+        <div class="bins">
+          <div class="bin" data-bin="tetrapack" id="bin-tetra" aria-label="Tacho Tetrapack">
+            <div class="icon">🧃</div>
+            <h3>Tetrapack</h3>
+            <div class="label">Envases de cartón para líquidos</div>
+          </div>
+
+          <div class="bin" data-bin="plástico" id="bin-plastic" aria-label="Tacho Plástico">
+            <div class="icon">🧴</div>
+            <h3>Plástico</h3>
+            <div class="label">Botellas, bolsas, envases</div>
+          </div>
+
+          <div class="bin" data-bin="orgánico" id="bin-organic" aria-label="Tacho Orgánico">
+            <div class="icon">🍌</div>
+            <h3>Orgánico</h3>
+            <div class="label">Restos de comida</div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <div id="message">Arrastra un objeto hacia un tacho.</div>
+          <div><strong>Puntaje:</strong> <span id="score">0</span></div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script>
+    // Elementos y estado del juego
+    const itemsContainer = document.getElementById('items');
+    const correctSpan = document.getElementById('correct');
+    const wrongSpan = document.getElementById('wrong');
+    const scoreSpan = document.getElementById('score');
+    const messageDiv = document.getElementById('message');
+    const shuffleBtn = document.getElementById('shuffleBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    let state = {correct:0, wrong:0, score:0};
+
+    // Lista de objetos con su clase correcta
+    const ITEMS = [
+      {id:1,name:'Cartón de leche (tetrapack)',type:'tetrapack',emoji:'🧃'},
+      {id:2,name:'Caja de jugo (tetrapack)',type:'tetrapack',emoji:'📦'},
+      {id:3,name:'Botella plástica',type:'plástico',emoji:'🧴'},
+      {id:4,name:'Envase plástico',type:'plástico',emoji:'♻️'},
+      {id:5,name:'Cáscara de plátano',type:'orgánico',emoji:'🍌'},
+      {id:6,name:'Restos de fruta',type:'orgánico',emoji:'🍎'},
+      {id:7,name:'Botella PET',type:'plástico',emoji:'🥤'},
+      {id:8,name:'Tetrapack de crema',type:'tetrapack',emoji:'🧃'}
+    ];
+
+    let pool = [];
+
+    function shuffleArray(a){
+      for(let i=a.length-1;i>0;i--){
+        const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];
+      }
+      return a;
+    }
+
+    function initPool(){
+      pool = shuffleArray(ITEMS.slice());
+      renderItems();
+      state = {correct:0, wrong:0, score:0};
+      updateUI();
+      messageDiv.textContent = 'Arrastra un objeto hacia un tacho.';
+    }
+
+    function renderItems(){
+      itemsContainer.innerHTML = '';
+      pool.forEach(obj => {
+        const el = document.createElement('div');
+        el.className = 'item';
+        el.draggable = true;
+        el.setAttribute('data-type', obj.type);
+        el.setAttribute('data-id', obj.id);
+        el.setAttribute('title', obj.name);
+        el.innerHTML = ` <div style="text-align:center"><div class="icon">${obj.emoji}</div><div style="font-size:.78rem;margin-top:6px">${obj.name.split('(')[0].trim()}</div></div>`;
+
+        el.addEventListener('dragstart', e => {
+          e.dataTransfer.setData('text/plain', JSON.stringify({id: obj.id, type: obj.type}));
+          setTimeout(()=>el.classList.add('dragging'),20);
+        });
+        el.addEventListener('dragend', e => el.classList.remove('dragging'));
+
+        itemsContainer.appendChild(el);
+      });
+    }
+
+    // Bins
+    const bins = document.querySelectorAll('.bin');
+    bins.forEach(bin => {
+      bin.addEventListener('dragover', e => {
+        e.preventDefault();
+        bin.classList.add('highlight');
+      });
+      bin.addEventListener('dragleave', e => {
+        bin.classList.remove('highlight');
+      });
+      bin.addEventListener('drop', e => {
+        e.preventDefault();
+        bin.classList.remove('highlight');
+        const data = e.dataTransfer.getData('text/plain');
+        if(!data) return;
+        let parsed;
+        try{parsed = JSON.parse(data);}catch(err){return}
+        handleDrop(parsed, bin);
+      });
+    });
+
+    function handleDrop(item, bin){
+      const tipoCorrecto = bin.getAttribute('data-bin');
+      const itemIdx = pool.findIndex(x=>x.id===item.id);
+      if(itemIdx === -1){ messageDiv.textContent = 'Ese objeto ya fue clasificado.'; return; }
+
+      const obj = pool[itemIdx];
+      if(obj.type === tipoCorrecto){
+        // Acierto
+        pool.splice(itemIdx,1);
+        playCorrectSound();
+        state.correct += 1;
+        state.score += 10;
+        messageDiv.textContent = `¡Correcto! ${obj.name} → ${tipoCorrecto.toUpperCase()}`;
+      } else {
+        // Error
+        state.wrong += 1;
+        state.score -= 3;
+        messageDiv.textContent = `¡Incorrecto! ${obj.name} no va en ${tipoCorrecto}.`;
+      }
+      updateUI();
+      renderItems();
+      checkEnd();
+    }
+
+    function updateUI(){
+      correctSpan.textContent = state.correct;
+      wrongSpan.textContent = state.wrong;
+      scoreSpan.textContent = state.score;
+    }
+
+    function checkEnd(){
+      if(pool.length === 0){
+        messageDiv.textContent = `Juego terminado. Puntaje: ${state.score}. Aciertos: ${state.correct}, Errores: ${state.wrong}`;
+        // pequeño efecto
+        document.querySelectorAll('.bin').forEach(b=>b.classList.add('highlight'));
+        setTimeout(()=>document.querySelectorAll('.bin').forEach(b=>b.classList.remove('highlight')),1200);
+      }
+    }
+
+    shuffleBtn.addEventListener('click', ()=>{pool = shuffleArray(pool);renderItems();messageDiv.textContent='Objetos barajados.'});
+    resetBtn.addEventListener('click', initPool);
+
+    // --- Sonido de acierto usando WebAudio para que no haga falta archivo externo ---
+    let audioCtx = null;
+    function ensureAudio(){
+      if(!audioCtx){
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    function playCorrectSound(){
+      // Sonido breve en pequeña melodía agradable
+      ensureAudio();
+      const now = audioCtx.currentTime;
+      const o1 = audioCtx.createOscillator();
+      const o2 = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      o1.type = 'sine'; o2.type = 'triangle';
+      o1.frequency.setValueAtTime(660, now);
+      o2.frequency.setValueAtTime(990, now);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.15, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+
+      o1.connect(gain);
+      o2.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      o1.start(now); o2.start(now + 0.02);
+      o1.stop(now + 0.22); o2.stop(now + 0.22);
+    }
+
+    // Activador de audio en interacción (necesario en algunos navegadores)
+    window.addEventListener('pointerdown', ()=>{ if(!audioCtx) ensureAudio(); }, {once:true});
+
+    // Inicialización
+    initPool();
+  </script>
+</body>
+</html>
